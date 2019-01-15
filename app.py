@@ -38,10 +38,11 @@ def generate_table_from_xlsx(path):
             for i in xrange(0, len(idx_w)):
                 if row_values[1] is '':
                     continue
-                serial = "40101310%s" % row_values[1]
-                chunks.append([time_w[i], row_values[idx_c[i]]])
+                s = "40101310%s" % row_values[1]
+                serial = int(s.split('.')[0])
+                chunks.append([time_w[i], row_values[idx_c[i]], serial])
             if len(chunks) != 0:
-                data[int(serial.split('.')[0])] = chunks
+                data[serial] = chunks
     print(data)
     return data
 
@@ -52,24 +53,23 @@ if __name__ == '__main__':
     data_f = generate_table_from_xlsx(sys.argv[2])
 
     h5 = tables.open_file(path, "r")
-    data = h5.root.resolution_d.data
+    data = h5.root.resolution_h.data
     size = len(data)
-    list_raw = []
-    a = []
-
     d_ = {}
     d = {}
 
     for key in data_f.keys():
         for values in data_f[key]:
-            d_[values[0]] = [[], []]
+            d_[values[0]] = [[], [], [], []]
 
     for key in data_f.keys():
-        d[key] = d_
+        for v in data_f[key]:
+            d[str(key)+"_"+str(v[0])] = [[], [], [], []]
 
     # for key in data_f.keys():
     #     for values in data_f[key]:
     #         d[key][values[0]] = [[], values[1]]
+    list_a = {}
     for index, x in enumerate(data):
         # print("%d%%" % int((index/size)*100))
         ts = int(x['timestamp'])
@@ -77,20 +77,30 @@ if __name__ == '__main__':
         serial = x['serial_number']
         activity = x['first_sensor_value']
         value = (date, serial, activity)
-        # print(value)
+        # print(x['timestamp'], value)
 
         if serial in data_f:
             # print("foud serial number...")
             list = data_f[serial]
+
             for i in list:
                 if i[0] == date:
-                    d[serial][date][0].append(activity)
-                    d[serial][date][1] = i[1]
+                    # print(serial, date, activity, "d[%d][%s][0]=[%s]" % (serial, date, ','.join(str(e) for e in d[serial][date][0])))
+                    # print(serial, date, activity, i[1])
+                    k = d[str(serial)+"_"+str(date)]
+                    k[0].append(activity)
+                    # list_a[serial] = activity
+                    k[1] = i[1]
+                    k[2] = serial
+                    k[3] = date
                     # d[serial][1] = i[1]
                     # d[serial] = [d[serial], i[1]]
-        print(d)
-        # if len(a) != 0:
-        #     new_trainning_record = [activity, famacha]
-        #     print(new_trainning_record)
+        # print(d)
 
+    size_t = 0
+    for v in d.values():
+        if len(v[0]) != 0 and v[1] != '' and v[1] != ' -':
+            print(len(v[0]), v)
+            size_t += 1
+    print("trainning set size is %d." % size_t)
 
