@@ -1,22 +1,23 @@
 import os
-import re
-import uuid
+import os.path
+import sys
 from datetime import datetime
 
 import numpy as np
 import tables
-from cassandra.cluster import Cluster
-from ipython_genutils.py3compat import xrange
-from tables import *
-import os.path
-from collections import defaultdict
-import dateutil.relativedelta
-import time
-import os
-import glob
 import xlrd
-import pandas
-import sys
+from ipython_genutils.py3compat import xrange
+from scipy import signal
+from tables import *
+import json
+
+
+def purge_file(filename):
+    print("purge %s..." % filename)
+    try:
+        os.remove(filename)
+    except FileNotFoundError:
+        print("file not found.")
 
 
 def generate_table_from_xlsx(path):
@@ -98,9 +99,20 @@ if __name__ == '__main__':
         # print(d)
 
     size_t = 0
-    for v in d.values():
-        if len(v[0]) != 0 and v[1] != '' and v[1] != ' -':
-            print(len(v[0]), v)
-            size_t += 1
+    purge_file('data.json')
+    with open('data.json', 'a') as outfile:
+        for v in d.values():
+            data = v[0]
+            famacha_s = v[1]
+            serial = v[2]
+            time = v[3]
+            if len(v[0]) != 0 and v[1] != '' and v[1] != ' -':
+                # print(len(v[0]), v)
+                size_t += 1
+                widths = np.arange(1, 31)
+                f = signal.cwt(np.asarray(v[0]), signal.ricker, widths).flatten().tolist()
+                cwt = [f, v[1], v[2], v[3]]
+                json.dump(v, outfile)
+                outfile.write('\n')
     print("trainning set size is %d." % size_t)
 
