@@ -1,15 +1,15 @@
+import json
 import os
 import os.path
 import sys
-from datetime import datetime
+import time
+from datetime import datetime,timedelta
 
-import numpy as np
+import pymysql
 import tables
 import xlrd
+from dateutil.relativedelta import *
 from ipython_genutils.py3compat import xrange
-from scipy import signal
-from tables import *
-import json
 
 
 def purge_file(filename):
@@ -48,71 +48,182 @@ def generate_table_from_xlsx(path):
     return data
 
 
+def get_temp_humidity(date, data):
+    humidity = None
+    temp = None
+    data_d = data[date.strftime("%Y-%m-%d")]
+    time_d = date.strftime("%H:%M:%S").split(':')[0]
+    for item in data_d:
+        if time_d == item['time'].split(':')[0]:
+            humidity = item['humidity']
+            temp = item['temp_c']
+
+    return int(temp), int(humidity)
+
+
+def get_previous_famacha_score(serial_number, famacha_test_date, data_famacha):
+    previous_score = None
+    list = data_famacha[serial_number]
+    for i in range(1, len(list)):
+        item = list[i]
+        if item[0] == famacha_test_date:
+            previous_score = list[i-1][1]
+            break
+    return previous_score
+
+
+def pad(a, N):
+    a += [-1] * (N - len(a))
+    return a
+
+
+def connect_to_sql_database(db_server_name="localhost", db_user="axel", db_password="Mojjo@2015", db_name="south_africa_test4",
+                            char_set="utf8mb4", cusror_type=pymysql.cursors.DictCursor):
+    # print("connecting to db %s..." % db_name)
+    global sql_db
+    sql_db = pymysql.connect(host=db_server_name, user=db_user, password=db_password,
+                             db=db_name, charset=char_set, cursorclass=cusror_type)
+    return sql_db
+
+
+def execute_sql_query(query, records=None, log_enabled=False):
+    try:
+        sql_db = connect_to_sql_database()
+        cursor = sql_db.cursor()
+        if records is not None:
+            print("SQL Query: %s" % query, records)
+            cursor.executemany(query, records)
+        else:
+            if log_enabled:
+                print("SQL Query: %s" % query)
+            cursor.execute(query)
+        rows = cursor.fetchall()
+        for row in rows:
+            if log_enabled:
+                print("SQL Answer: %s" % row)
+        return rows
+    except Exception as e:
+        print("Exeception occured:{}".format(e))
+
+
+def get_elapsed_time_string(time_initial, time_next):
+    dt1 = datetime.fromtimestamp(time_initial)
+    dt2 = datetime.fromtimestamp(time_next)
+    rd = relativedelta(dt2, dt1)
+    return '%d years %d months %d days %d hours %d minutes %d seconds' % (
+        rd.years, rd.months, rd.days, rd.hours, rd.minutes, rd.seconds)
+
+
 if __name__ == '__main__':
     print(sys.argv)
-    path = sys.argv[1]
-    data_f = generate_table_from_xlsx(sys.argv[2])
+    with open(sys.argv[4]) as f:
+        weather_data = json.load(f)
 
-    h5 = tables.open_file(path, "r")
-    data = h5.root.resolution_h.data
-    size = len(data)
-    d_ = {}
-    d = {}
+    data_famacha = generate_table_from_xlsx(sys.argv[2])
+    data_famacha_flattened = [y for x in data_famacha.values() for y in x]
 
-    for key in data_f.keys():
-        for values in data_f[key]:
-            d_[values[0]] = [[], [], [], []]
+    time_between_tests = []
+    for i, current_date in enumerate(data_famacha_flattened[:-1]):
+        next_date = data_famacha_flattened[i + 1]
+        if current_date[2] == next_date[2]:
+            d2 = datetime.strptime(next_date[0], '%d/%m/%Y')
+            d1 = datetime.strptime(current_date[0], '%d/%m/%Y')
+            diff = (d2 - d1)
+            time_between_tests.append(diff.days)
+            print(diff.days, current_date, next_date)
+    print("minimum delay between famacha tests is %d days." % min(time_between_tests))
 
-    for key in data_f.keys():
-        for v in data_f[key]:
-            d[str(key)+"_"+str(v[0])] = [[], [], [], []]
+    data_activity = []
+    if sys.argv[3] == 'h5':
+        h5 = tables.open_file(sys.argv[1], "r")
+        data_activity = h5.root.resolution_f.data
 
-    # for key in data_f.keys():
-    #     for values in data_f[key]:
-    #         d[key][values[0]] = [[], values[1]]
-    list_a = {}
-    for index, x in enumerate(data):
-        # print("%d%%" % int((index/size)*100))
-        ts = int(x['timestamp'])
-        date = datetime.utcfromtimestamp(ts).strftime('%d/%m/%Y')
-        serial = x['serial_number']
-        activity = x['first_sensor_value']
-        value = (date, serial, activity)
-        # print(x['timestamp'], value)
+    if sys.argv[3] == 'sql':
+        db_server_name = "localhost"
+        db_user = "axel"
+        db_password = "Mojjo@2015"
+        cusror_type = pymysql.cursors.DictCursor
+        sql_db = pymysql.connect(host=db_server_name, user=db_user, password=db_password)
+        connect_to_sql_database()
+        farm_id = "Delmas_70101200027"
+        print("loading data...")
 
-        if serial in data_f:
-            # print("foud serial number...")
-            list = data_f[serial]
+        print("data loaded.")
 
-            for i in list:
-                if i[0] == date:
-                    # print(serial, date, activity, "d[%d][%s][0]=[%s]" % (serial, date, ','.join(str(e) for e in d[serial][date][0])))
-                    # print(serial, date, activity, i[1])
-                    k = d[str(serial)+"_"+str(date)]
-                    k[0].append(activity)
-                    # list_a[serial] = activity
-                    k[1] = i[1]
-                    k[2] = serial
-                    k[3] = date
-                    # d[serial][1] = i[1]
-                    # d[serial] = [d[serial], i[1]]
-        # print(d)
+    purge_file('raw.json')
 
-    size_t = 0
-    purge_file('data.json')
-    with open('data.json', 'a') as outfile:
-        for v in d.values():
-            data = v[0]
-            famacha_s = v[1]
-            serial = v[2]
-            time = v[3]
-            if len(v[0]) != 0 and v[1] != '' and v[1] != ' -':
-                # print(len(v[0]), v)
-                size_t += 1
-                widths = np.arange(1, 31)
-                f = signal.cwt(np.asarray(v[0]), signal.ricker, widths).flatten().tolist()
-                cwt = [f, v[1], v[2], v[3]]
-                json.dump(v, outfile)
+    print("generating training sets....")
+    for i, data_f in enumerate(data_famacha_flattened):
+        famacha_test_date = time.strptime(data_f[0], "%d/%m/%Y")
+        try:
+            famacha_score = int(data_f[1])
+        except ValueError as e:
+            # print(e)
+            continue
+        animal_id_f = data_f[2]
+        dates_list = []
+        dates_list_formated = []
+        activity_list = []
+        indexes = []
+        idx = 0
+        animal_id_a = None
+        temperature_list = []
+        humidity_list = []
+        previous_famacha_score_list = []
+        #find the activity data of that animal the n days before the test
+        N_DAYS = 6
+        famacha_test_date_epoch_s = str(time.mktime(famacha_test_date)).split('.')[0]
+        famacha_test_date_epoch_before_s = str(time.mktime((datetime.fromtimestamp(time.mktime(famacha_test_date)) - timedelta(days=N_DAYS)).timetuple())).split('.')[0]
+
+        data_activity = execute_sql_query("SELECT timestamp, serial_number, first_sensor_value FROM %s_resolution_d WHERE timestamp BETWEEN %s AND %s AND serial_number = %s" % (farm_id, famacha_test_date_epoch_before_s, famacha_test_date_epoch_s, str(animal_id_f)))
+
+        print("mapping activity to famacha score progress=%d/%d ..." % (i, len(data_famacha_flattened)))
+        for j, data_a in enumerate(data_activity):
+            #transform date in time for comparaison
+            animal_id_a = data_a['serial_number']
+            if animal_id_f == animal_id_a:
+                curr_datetime = datetime.utcfromtimestamp(int(data_a['timestamp']))
+                activity_date = time.strptime(curr_datetime.strftime('%d/%m/%Y'), "%d/%m/%Y")
+
+                # find temp and humidity of the day
+                temp, humidity = get_temp_humidity(curr_datetime, weather_data)
+
+
+                # if activity_date >= famacha_test_date:
+                #     # print("famacha date! stop collecting data.")
+                #     break
+
+                # print(first_sensor_value, j)
+                # d1 = datetime.fromtimestamp(time.mktime(famacha_test_date))
+                # d2 = datetime.fromtimestamp(time.mktime(activity_date))
+                # duration = d1 - d2
+                # if duration.days > n:
+                #     continue
+
+                idx += 1
+                activity_list.append(data_a['first_sensor_value'])
+                indexes.append(idx)
+                dates_list.append(activity_date)
+                temperature_list.append(temp)
+                humidity_list.append(humidity)
+                dates_list_formated.append(datetime.utcfromtimestamp(int(data_a['timestamp'])).strftime('%d/%m/%Y %H:%M'))
+        previous_famacha_score = get_previous_famacha_score(animal_id_f, datetime.fromtimestamp(time.mktime(famacha_test_date)).strftime("%d/%m/%Y"), data_famacha)
+        indexes.reverse()
+
+        if indexes is not None and len(indexes) > 0:
+            d1 = datetime.fromtimestamp(time.mktime(famacha_test_date))
+            d2 = datetime.fromtimestamp(time.mktime(dates_list[0]))
+
+            debugging_array = [famacha_score, animal_id_a, d1.strftime("%d/%m/%Y"), d2.strftime("%d/%m/%Y"), (d1 - d2).days]
+            training_data = [debugging_array, []]
+
+            # fill the training array
+            for i in range(0, len(indexes)):
+                training_data[1].append([indexes[i], activity_list[i], temperature_list[i], humidity_list[i], previous_famacha_score])
+
+            # print(len(dates_list_formated), dates_list_formated)
+            # print(len(indexes), len(training_data[5]), training_data)
+
+            with open('raw.json', 'a') as outfile:
+                json.dump(training_data, outfile)
                 outfile.write('\n')
-    print("trainning set size is %d." % size_t)
-
