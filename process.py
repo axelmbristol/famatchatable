@@ -15,20 +15,13 @@ def purge_file(filename):
         print("file not found.")
 
 
-if __name__ == '__main__':
-    print(sys.argv)
-    lines = [line.rstrip('\n') for line in open('raw.json')]
+def process_raw_file(input_data):
     sizes = []
-    # activity_array = []
-    # indexes_array = []
-    # temp_array = []
-    # humidity_array = []
-    # previous_famacha_score_array = []
     famacha_array = []
     serial_array = []
     famacha_date_array = []
     animal_data = []
-    for line in lines:
+    for line in input_data:
         l = json.loads(line)
         famacha_data_array = l[0]
         sensor_data_array = l[1]
@@ -45,14 +38,8 @@ if __name__ == '__main__':
                                          str(data[2]) if data[2] is not None else 'NaN',  # temp
                                          str(data[3]) if data[3] is not None else 'NaN',  # humidity
                                          str(data[4]) if data[4] is not None else 'NaN'))  # prevous_score
-            # indexes_array.append(data[0])
-            # activity_array.append(data[1])
-            # temp_array.append(data[2])
-            # humidity_array.append(data[3])
-            # previous_famacha_score_array.append(data[4])
 
         animal_data.append(d)
-
         famacha_array.append(famacha_data_array[0])
         serial_array.append(famacha_data_array[1])
         famacha_date_array.append(famacha_data_array[2])
@@ -69,21 +56,19 @@ if __name__ == '__main__':
     with open('training_time_domain_i.data', 'a') as outfile:
         for i in range(0, count):
             if len(animal_data[i]) == m_c:
-
-                item_c = animal_data[i]
-
-                training_str = ','.join(item_c) + ',' + str(famacha_array[i]) + ',' + str(serial_array[i]) + ',' + str(
-                    famacha_date_array[i])
-
-                training_str_formated = ','.join(item_c) + ',' + str(famacha_array[i]) + ',' + str(
+                item = animal_data[i]
+                #temp string for debuging
+                training_str_formated = ','.join(item) + ',' + str(famacha_array[i]) + ',' + str(
                     serial_array[i]) + ',' + str(
                     famacha_date_array[i])
-
                 print(training_str_formated[-200:])
-
-                training_str_flatten = ','.join(item_c) + ',' + str(famacha_array[i])
-                if i == 0:
-                    print(training_str_flatten[-200:])
-
+                #final string for training set file
+                training_str_flatten = ','.join(item) + ',' + str(famacha_array[i])
                 outfile.write(training_str_flatten)
                 outfile.write('\n')
+
+
+if __name__ == '__main__':
+    print(sys.argv)
+    lines = [line.rstrip('\n') for line in open('raw.json')]
+    process_raw_file(lines)

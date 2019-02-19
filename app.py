@@ -176,9 +176,12 @@ if __name__ == '__main__':
         #find the activity data of that animal the n days before the test
         N_DAYS = 6
         famacha_test_date_epoch_s = str(time.mktime(famacha_test_date)).split('.')[0]
-        famacha_test_date_epoch_before_s = str(time.mktime((datetime.fromtimestamp(time.mktime(famacha_test_date)) - timedelta(days=N_DAYS)).timetuple())).split('.')[0]
+        famacha_test_date_epoch_before_s = str(time.mktime((datetime.fromtimestamp(time.mktime(famacha_test_date)) -
+                                                            timedelta(days=N_DAYS)).timetuple())).split('.')[0]
 
-        data_activity = execute_sql_query("SELECT timestamp, serial_number, first_sensor_value FROM %s_resolution_f WHERE timestamp BETWEEN %s AND %s AND serial_number = %s" % (farm_id, famacha_test_date_epoch_before_s, famacha_test_date_epoch_s, str(animal_id_f)))
+        data_activity = execute_sql_query("SELECT timestamp, serial_number, first_sensor_value FROM %s_resolution_f"
+                                          " WHERE timestamp BETWEEN %s AND %s AND serial_number = %s" %
+                                          (farm_id, famacha_test_date_epoch_before_s, famacha_test_date_epoch_s, str(animal_id_f)))
 
         print("mapping activity to famacha score progress=%d/%d ..." % (i, len(data_famacha_flattened)))
         for j, data_a in enumerate(data_activity):
@@ -191,18 +194,6 @@ if __name__ == '__main__':
                 # find temp and humidity of the day
                 temp, humidity = get_temp_humidity(curr_datetime, weather_data)
 
-
-                # if activity_date >= famacha_test_date:
-                #     # print("famacha date! stop collecting data.")
-                #     break
-
-                # print(first_sensor_value, j)
-                # d1 = datetime.fromtimestamp(time.mktime(famacha_test_date))
-                # d2 = datetime.fromtimestamp(time.mktime(activity_date))
-                # duration = d1 - d2
-                # if duration.days > n:
-                #     continue
-
                 idx += 1
                 activity_list.append(data_a['first_sensor_value'])
                 indexes.append(idx)
@@ -210,7 +201,8 @@ if __name__ == '__main__':
                 temperature_list.append(temp)
                 humidity_list.append(humidity)
                 dates_list_formated.append(datetime.utcfromtimestamp(int(data_a['timestamp'])).strftime('%d/%m/%Y %H:%M'))
-        previous_famacha_score = get_previous_famacha_score(animal_id_f, datetime.fromtimestamp(time.mktime(famacha_test_date)).strftime("%d/%m/%Y"), data_famacha)
+        previous_famacha_score = get_previous_famacha_score(animal_id_f, datetime.fromtimestamp(time.mktime(famacha_test_date))
+                                                            .strftime("%d/%m/%Y"), data_famacha)
         indexes.reverse()
 
         if indexes is not None and len(indexes) > 0:
@@ -222,7 +214,8 @@ if __name__ == '__main__':
 
             # fill the training array
             for i in range(0, len(indexes)):
-                training_data[1].append([indexes[i], activity_list[i], temperature_list[i], humidity_list[i], previous_famacha_score])
+                training_data[1].append([indexes[i], activity_list[i], temperature_list[i], humidity_list[i],
+                                         previous_famacha_score])
 
             # print(len(dates_list_formated), dates_list_formated)
             # print(len(indexes), len(training_data[5]), training_data)
