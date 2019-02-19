@@ -19,54 +19,71 @@ if __name__ == '__main__':
     print(sys.argv)
     lines = [line.rstrip('\n') for line in open('raw.json')]
     sizes = []
-    activity_array = []
+    # activity_array = []
+    # indexes_array = []
+    # temp_array = []
+    # humidity_array = []
+    # previous_famacha_score_array = []
     famacha_array = []
     serial_array = []
     famacha_date_array = []
+    animal_data = []
     for line in lines:
         l = json.loads(line)
-        famacha_score = l[0]
-        activity_levels = l[5]
-        data = [(x) for x in activity_levels]
-        if len(data) == 0:
+        famacha_data_array = l[0]
+        sensor_data_array = l[1]
+        s = len(sensor_data_array)
+        if s == 0:
             continue
-        sizes.append(len(data))
-        activity_array.append(data)
-        famacha_array.append(famacha_score)
-        serial_array.append(l[1])
-        famacha_date_array.append(l[2])
+        sizes.append(s)
+
+        d = []
+        for data in sensor_data_array:
+            # cast values to string for array dump
+            d.append("%s,%s,%s,%s,%s" % (str(data[0]) if data[0] is not None else 'NaN',  # index
+                                         str(data[1]) if data[1] is not None else 'NaN',  # activity
+                                         str(data[2]) if data[2] is not None else 'NaN',  # temp
+                                         str(data[3]) if data[3] is not None else 'NaN',  # humidity
+                                         str(data[4]) if data[4] is not None else 'NaN'))  # prevous_score
+            # indexes_array.append(data[0])
+            # activity_array.append(data[1])
+            # temp_array.append(data[2])
+            # humidity_array.append(data[3])
+            # previous_famacha_score_array.append(data[4])
+
+        animal_data.append(d)
+
+        famacha_array.append(famacha_data_array[0])
+        serial_array.append(famacha_data_array[1])
+        famacha_date_array.append(famacha_data_array[2])
+
     m_c = most_common(sizes)
     count = sizes.count(m_c)
     print(m_c, count, sizes)
     purge_file('count.data')
     with open('count.data', 'a') as outfile_c:
-        outfile_c.write(str(count))
+        outfile_c.write(str(m_c))
         outfile_c.close()
 
     purge_file('training_time_domain_i.data')
     with open('training_time_domain_i.data', 'a') as outfile:
-        for i, item in enumerate(activity_array):
-            if len(item) == m_c:
-                item_c = []
-                item_f = []
-                for v in item:
-                    if v[1] is None:
-                        s = str(v[0])+',NaN'
-                        item_f.append(str([v[0], None]))
-                        item_c.append(s)
-                        continue
-                    s = str(v[0]) + ',' + str(v[1])
-                    item_f.append(str(v))
-                    item_c.append(s)
+        for i in range(0, count):
+            if len(animal_data[i]) == m_c:
+
+                item_c = animal_data[i]
 
                 training_str = ','.join(item_c) + ',' + str(famacha_array[i]) + ',' + str(serial_array[i]) + ',' + str(
                     famacha_date_array[i])
-                training_str_formated = ','.join(item_f) + ',' + str(famacha_array[i]) + ',' + str(serial_array[i]) + ',' + str(
+
+                training_str_formated = ','.join(item_c) + ',' + str(famacha_array[i]) + ',' + str(
+                    serial_array[i]) + ',' + str(
                     famacha_date_array[i])
+
                 print(training_str_formated[-200:])
+
                 training_str_flatten = ','.join(item_c) + ',' + str(famacha_array[i])
                 if i == 0:
                     print(training_str_flatten[-200:])
+
                 outfile.write(training_str_flatten)
                 outfile.write('\n')
-

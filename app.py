@@ -51,14 +51,17 @@ def generate_table_from_xlsx(path):
 def get_temp_humidity(date, data):
     humidity = None
     temp = None
-    data_d = data[date.strftime("%Y-%m-%d")]
-    time_d = date.strftime("%H:%M:%S").split(':')[0]
-    for item in data_d:
-        if time_d == item['time'].split(':')[0]:
-            humidity = item['humidity']
-            temp = item['temp_c']
+    try:
+        data_d = data[date.strftime("%Y-%m-%d")]
+        time_d = date.strftime("%H:%M:%S").split(':')[0]
+        for item in data_d:
+            if time_d == item['time'].split(':')[0]:
+                humidity = item['humidity']
+                temp = item['temp_c']
+    except KeyError as e:
+        print(e)
 
-    return int(temp), int(humidity)
+    return int(0 if temp is None else temp), int(0 if humidity is None else humidity)
 
 
 def get_previous_famacha_score(serial_number, famacha_test_date, data_famacha):
@@ -67,7 +70,7 @@ def get_previous_famacha_score(serial_number, famacha_test_date, data_famacha):
     for i in range(1, len(list)):
         item = list[i]
         if item[0] == famacha_test_date:
-            previous_score = list[i-1][1]
+            previous_score = int(list[i-1][1])
             break
     return previous_score
 
@@ -175,7 +178,7 @@ if __name__ == '__main__':
         famacha_test_date_epoch_s = str(time.mktime(famacha_test_date)).split('.')[0]
         famacha_test_date_epoch_before_s = str(time.mktime((datetime.fromtimestamp(time.mktime(famacha_test_date)) - timedelta(days=N_DAYS)).timetuple())).split('.')[0]
 
-        data_activity = execute_sql_query("SELECT timestamp, serial_number, first_sensor_value FROM %s_resolution_d WHERE timestamp BETWEEN %s AND %s AND serial_number = %s" % (farm_id, famacha_test_date_epoch_before_s, famacha_test_date_epoch_s, str(animal_id_f)))
+        data_activity = execute_sql_query("SELECT timestamp, serial_number, first_sensor_value FROM %s_resolution_f WHERE timestamp BETWEEN %s AND %s AND serial_number = %s" % (farm_id, famacha_test_date_epoch_before_s, famacha_test_date_epoch_s, str(animal_id_f)))
 
         print("mapping activity to famacha score progress=%d/%d ..." % (i, len(data_famacha_flattened)))
         for j, data_a in enumerate(data_activity):
@@ -227,3 +230,4 @@ if __name__ == '__main__':
             with open('raw.json', 'a') as outfile:
                 json.dump(training_data, outfile)
                 outfile.write('\n')
+                break
