@@ -52,8 +52,8 @@ def process_raw_file(input_data):
         outfile_c.write(str(m_c))
         outfile_c.close()
 
-    purge_file('training_time_domain_i.data')
-    with open('training_time_domain_i.data', 'a') as outfile:
+    purge_file('training_time_domain.data')
+    with open('training_time_domain.data', 'a') as outfile:
         for i in range(0, count):
             if len(animal_data[i]) == m_c:
                 item = animal_data[i]

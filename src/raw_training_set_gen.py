@@ -59,18 +59,23 @@ def get_temp_humidity(date, data):
                 humidity = item['humidity']
                 temp = item['temp_c']
     except KeyError as e:
-        print(e)
+        # print(e)
+        pass
 
     return int(0 if temp is None else temp), int(0 if humidity is None else humidity)
 
 
-def get_previous_famacha_score(serial_number, famacha_test_date, data_famacha):
+def get_previous_famacha_score(serial_number, famacha_test_date, data_famacha, curr_score):
     previous_score = None
     list = data_famacha[serial_number]
     for i in range(1, len(list)):
         item = list[i]
         if item[0] == famacha_test_date:
-            previous_score = int(list[i-1][1])
+            try:
+                previous_score = int(list[i-1][1])
+            except ValueError as e:
+                previous_score = curr_score
+                # print(e)
             break
     return previous_score
 
@@ -133,13 +138,13 @@ if __name__ == '__main__':
             d1 = datetime.strptime(current_date[0], '%d/%m/%Y')
             diff = (d2 - d1)
             time_between_tests.append(diff.days)
-            print(diff.days, current_date, next_date)
+            # print(diff.days, current_date, next_date)
     print("minimum delay between famacha tests is %d days." % min(time_between_tests))
 
     data_activity = []
     if sys.argv[3] == 'h5':
         h5 = tables.open_file(sys.argv[1], "r")
-        data_activity = h5.root.resolution_f.data
+        data_activity = h5.root.resolution_min.data
 
     if sys.argv[3] == 'sql':
         db_server_name = "localhost"
@@ -149,9 +154,6 @@ if __name__ == '__main__':
         sql_db = pymysql.connect(host=db_server_name, user=db_user, password=db_password)
         connect_to_sql_database()
         farm_id = "Delmas_70101200027"
-        print("loading data...")
-
-        print("data loaded.")
 
     purge_file('raw.json')
 
@@ -163,64 +165,58 @@ if __name__ == '__main__':
         except ValueError as e:
             # print(e)
             continue
-        animal_id_f = data_f[2]
+        animal_id = data_f[2]
+
         dates_list = []
         dates_list_formated = []
         activity_list = []
         indexes = []
         idx = 0
-        animal_id_a = None
         temperature_list = []
         humidity_list = []
         previous_famacha_score_list = []
+
         #find the activity data of that animal the n days before the test
         N_DAYS = 6
         famacha_test_date_epoch_s = str(time.mktime(famacha_test_date)).split('.')[0]
         famacha_test_date_epoch_before_s = str(time.mktime((datetime.fromtimestamp(time.mktime(famacha_test_date)) -
                                                             timedelta(days=N_DAYS)).timetuple())).split('.')[0]
 
-        data_activity = execute_sql_query("SELECT timestamp, serial_number, first_sensor_value FROM %s_resolution_f"
+        data_activity = execute_sql_query("SELECT timestamp, serial_number, first_sensor_value FROM %s_resolution_d"
                                           " WHERE timestamp BETWEEN %s AND %s AND serial_number = %s" %
-                                          (farm_id, famacha_test_date_epoch_before_s, famacha_test_date_epoch_s, str(animal_id_f)))
-
+                                          (farm_id, famacha_test_date_epoch_before_s, famacha_test_date_epoch_s,
+                                           str(animal_id)))
         print("mapping activity to famacha score progress=%d/%d ..." % (i, len(data_famacha_flattened)))
         for j, data_a in enumerate(data_activity):
             #transform date in time for comparaison
-            animal_id_a = data_a['serial_number']
-            if animal_id_f == animal_id_a:
-                curr_datetime = datetime.utcfromtimestamp(int(data_a['timestamp']))
-                activity_date = time.strptime(curr_datetime.strftime('%d/%m/%Y'), "%d/%m/%Y")
+            curr_datetime = datetime.utcfromtimestamp(int(data_a['timestamp']))
+            activity_date = time.strptime(curr_datetime.strftime('%d/%m/%Y'), "%d/%m/%Y")
+            # find temp and humidity of the day
+            temp, humidity = get_temp_humidity(curr_datetime, weather_data)
+            idx += 1
+            activity_list.append(data_a['first_sensor_value'])
+            indexes.append(idx)
+            dates_list.append(activity_date)
+            temperature_list.append(temp)
+            humidity_list.append(humidity)
+            dates_list_formated.append(datetime.utcfromtimestamp(int(data_a['timestamp'])).strftime('%d/%m/%Y %H:%M'))
 
-                # find temp and humidity of the day
-                temp, humidity = get_temp_humidity(curr_datetime, weather_data)
-
-                idx += 1
-                activity_list.append(data_a['first_sensor_value'])
-                indexes.append(idx)
-                dates_list.append(activity_date)
-                temperature_list.append(temp)
-                humidity_list.append(humidity)
-                dates_list_formated.append(datetime.utcfromtimestamp(int(data_a['timestamp'])).strftime('%d/%m/%Y %H:%M'))
-        previous_famacha_score = get_previous_famacha_score(animal_id_f, datetime.fromtimestamp(time.mktime(famacha_test_date))
-                                                            .strftime("%d/%m/%Y"), data_famacha)
+        previous_famacha_score = get_previous_famacha_score(animal_id, datetime.fromtimestamp(time.mktime(famacha_test_date))
+                                                            .strftime("%d/%m/%Y"), data_famacha, famacha_score)
         indexes.reverse()
+        debugging_array = [famacha_score, animal_id,
+                           time.strftime('%d/%m/%Y', time.localtime(int(famacha_test_date_epoch_s))),
+                           time.strftime('%d/%m/%Y', time.localtime(int(famacha_test_date_epoch_before_s)))]
+        training_data = [debugging_array, []]
 
-        if indexes is not None and len(indexes) > 0:
-            d1 = datetime.fromtimestamp(time.mktime(famacha_test_date))
-            d2 = datetime.fromtimestamp(time.mktime(dates_list[0]))
+        # fill the training array
+        for i in range(0, len(indexes)):
+            training_data[1].append([indexes[i], activity_list[i], temperature_list[i], humidity_list[i],
+                                     previous_famacha_score])
 
-            debugging_array = [famacha_score, animal_id_a, d1.strftime("%d/%m/%Y"), d2.strftime("%d/%m/%Y"), (d1 - d2).days]
-            training_data = [debugging_array, []]
+        # print(len(dates_list_formated), dates_list_formated)
+        # print(len(indexes), len(training_data[5]), training_data)
 
-            # fill the training array
-            for i in range(0, len(indexes)):
-                training_data[1].append([indexes[i], activity_list[i], temperature_list[i], humidity_list[i],
-                                         previous_famacha_score])
-
-            # print(len(dates_list_formated), dates_list_formated)
-            # print(len(indexes), len(training_data[5]), training_data)
-
-            with open('raw.json', 'a') as outfile:
-                json.dump(training_data, outfile)
-                outfile.write('\n')
-                break
+        with open('raw.json', 'a') as outfile:
+            json.dump(training_data, outfile)
+            outfile.write('\n')
