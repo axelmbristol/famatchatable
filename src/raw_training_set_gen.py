@@ -123,7 +123,7 @@ def get_elapsed_time_string(time_initial, time_next):
 
 
 if __name__ == '__main__':
-    print(sys.argv)
+    print('args=', sys.argv)
     with open(sys.argv[4]) as f:
         weather_data = json.load(f)
 
