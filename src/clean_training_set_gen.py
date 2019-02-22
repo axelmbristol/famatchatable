@@ -52,7 +52,7 @@ def process_raw_file(input_data):
 
     purge_file('training_time_domain.data')
     with open('training_time_domain.data', 'a') as outfile:
-        for i in range(0, features_count):
+        for i in range(0, len(animal_data)):
             item = animal_data[i]
             #temp string for debuging
             training_str_formated = ','.join(item) + ',' + str(famacha_array[i]) + ',' + str(
